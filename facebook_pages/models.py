@@ -23,6 +23,7 @@ from facebook_api import fields
 from facebook_api.decorators import atomic
 from facebook_api.models import FacebookGraphIDModel, FacebookGraphManager
 from facebook_api.utils import get_improperly_configured_field
+from facebook_api.api import api_call
 
 
 if 'facebook_photos' in settings.INSTALLED_APPS:
@@ -57,6 +58,8 @@ class FacebookPageGraphManager(FacebookGraphManager):
 
 class Page(FacebookGraphIDModel):
 
+    members_countries = ['RU']
+
     name = models.CharField(max_length=200, help_text='The Page\'s name')
     link = models.URLField(max_length=1000, help_text='Link to the page on Facebook')
 
@@ -87,6 +90,10 @@ class Page(FacebookGraphIDModel):
 
     # for managing pages
     #access_token = models.CharField(max_length=500, help_text='A Page admin access_token for this page; The current user must be an administrator of this page; only returned if specifically requested via the fields URL parameter')
+
+    # from insights
+    for country in members_countries:
+        vars()['members_count_{0}'.format(country.lower())] = models.IntegerField(null=True, help_text='{0} members count'.format(country))
 
     # not in API
     username = models.CharField(max_length=200)
@@ -153,6 +160,31 @@ class Page(FacebookGraphIDModel):
 #    @atomic
     def fetch_fans(self, *args, **kwargs):
         return self.fetch_fans_ids_parser()
+
+    @atomic
+    def fetch_fans_countries(self, limit=1000, *args, **kwargs):
+        """
+        Retrieve and save count of page members
+        in countries specified in members_countries
+        """
+
+        response = api_call('%s/insights/page_fans_country/lifetime?fields=values' % self.graph_id, limit=limit, **kwargs)
+        if response:
+            log.debug('response objects count=%s, limit=%s, after=%s' %
+                      (len(response['data']), limit, kwargs.get('after')))
+
+            # Facebook API returns 3 latest values, so we need sort response to take the latest data
+            countries = sorted(response['data'][0]['values'], reverse=True)[0]['value']
+
+            for country, count in countries.items():
+                if country in self.members_countries:
+                    setattr(self, 'members_count_{0}'.format(country.lower()), count)
+                    self.save()
+                else:
+                    del countries[country]
+
+            return countries
+
 
     def fetch_fans_ids_parser(self):
         from .parser import FacebookPageFansParser, FacebookParseError
