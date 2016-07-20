@@ -58,7 +58,7 @@ class FacebookPageGraphManager(FacebookGraphManager):
 
 class Page(FacebookGraphIDModel):
 
-    members_countries = ['RU']
+    MEMBERS_COUNTRIES = ['RU']
 
     name = models.CharField(max_length=200, help_text='The Page\'s name')
     link = models.URLField(max_length=1000, help_text='Link to the page on Facebook')
@@ -92,7 +92,7 @@ class Page(FacebookGraphIDModel):
     #access_token = models.CharField(max_length=500, help_text='A Page admin access_token for this page; The current user must be an administrator of this page; only returned if specifically requested via the fields URL parameter')
 
     # from insights
-    for country in members_countries:
+    for country in MEMBERS_COUNTRIES:
         vars()['members_count_{0}'.format(country.lower())] = models.IntegerField(null=True, help_text='{0} members count'.format(country))
 
     # not in API
@@ -177,7 +177,7 @@ class Page(FacebookGraphIDModel):
             countries = sorted(response['data'][0]['values'], reverse=True)[0]['value']
 
             for country, count in countries.items():
-                if country in self.members_countries:
+                if country in self.MEMBERS_COUNTRIES:
                     setattr(self, 'members_count_{0}'.format(country.lower()), count)
                     self.save()
                 else:
