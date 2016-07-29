@@ -56,9 +56,14 @@ class FacebookPageGraphManager(FacebookGraphManager):
         return self.get(slug)
 
 
-class Page(FacebookGraphIDModel):
+class PageCountryStat(models.Model):
 
-    MEMBERS_COUNTRIES = ['RU']
+    country = models.CharField(max_length=2)
+    members_count = models.IntegerField(null=True, help_text='Members count')
+
+    page = models.ForeignKey('Page', related_name='country_stat')
+
+class Page(FacebookGraphIDModel):
 
     name = models.CharField(max_length=200, help_text='The Page\'s name')
     link = models.URLField(max_length=1000, help_text='Link to the page on Facebook')
@@ -90,10 +95,6 @@ class Page(FacebookGraphIDModel):
 
     # for managing pages
     #access_token = models.CharField(max_length=500, help_text='A Page admin access_token for this page; The current user must be an administrator of this page; only returned if specifically requested via the fields URL parameter')
-
-    # from insights
-    for country in MEMBERS_COUNTRIES:
-        vars()['members_count_{0}'.format(country.lower())] = models.IntegerField(null=True, help_text='{0} members count'.format(country))
 
     # not in API
     username = models.CharField(max_length=200)
@@ -162,7 +163,7 @@ class Page(FacebookGraphIDModel):
         return self.fetch_fans_ids_parser()
 
     @atomic
-    def fetch_fans_countries(self, limit=1000, *args, **kwargs):
+    def fetch_fans_country(self, country, limit=1000, *args, **kwargs):
         """
         Retrieve and save count of page members
         in countries specified in members_countries
@@ -176,15 +177,12 @@ class Page(FacebookGraphIDModel):
             # Facebook API returns 3 latest values, so we need sort response to take the latest data
             countries = sorted(response['data'][0]['values'], reverse=True)[0]['value']
 
-            for country, count in countries.items():
-                if country in self.MEMBERS_COUNTRIES:
-                    setattr(self, 'members_count_{0}'.format(country.lower()), count)
-                    self.save()
-                else:
-                    del countries[country]
+            if country in countries:
+                cs = PageCountryStat.objects.get_or_create(page=self, country=country, defaults={'members_count':0})[0]
+                cs.members_count = countries[country]
+                cs.save()
 
-            return countries
-
+                return countries[country]
 
     def fetch_fans_ids_parser(self):
         from .parser import FacebookPageFansParser, FacebookParseError
